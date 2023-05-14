@@ -61,7 +61,7 @@ def demodulate(rf:np.ndarray, fs:float, fd:float, fpass:float, fstop = None, usf
         ds_slice = []
         for ind, n in enumerate(i_filt.shape):
             if ind == axis:
-                ds_slice.append(slice(__stop=n, __step=dsf))
+                ds_slice.append(slice(0, n, dsf))
             else:
                 ds_slice.append(slice(n))
         ds_slice = tuple(ds_slice)
