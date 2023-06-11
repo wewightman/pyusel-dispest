@@ -54,7 +54,7 @@ def swsradon(spctm, lat, t, latmin, latmax, tmin, tmax, N:int=512, speedonly:boo
     else:
         st1, st2 = imax[0]
 
-    c = (latmax-latmin)/(trange[st2]-trange[st1])
+    c = float((latmax-latmin)/(trange[st2]-trange[st1]))
 
     if speedonly:
         return c
