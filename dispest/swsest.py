@@ -1,7 +1,7 @@
 import logging as __logging
 logger = __logging.getLogger(__name__)
 
-def swsradon(spctm, lat, t, latmin, latmax, tmin, tmax, N:int=512, speedonly:bool=True):
+def swsradon(spctm, lat, t, latmin, latmax, tmin, tmax, N:int=512, speedonly:bool=True, interpkind='cubic'):
     """Calculate the shear wave speed using radon sum algorithm
     
     Parameters:
@@ -23,7 +23,6 @@ def swsradon(spctm, lat, t, latmin, latmax, tmin, tmax, N:int=512, speedonly:boo
     `(speed, radonsum, t)`: estimated speed in m/s, energy integration chart, and time vector along the edges
     """
     from scipy.interpolate import interp1d as i1d
-    from scipy.interpolate import RectBivariateSpline as RBS
     import numpy as np
 
     t = np.array(t).flatten()
@@ -32,22 +31,24 @@ def swsradon(spctm, lat, t, latmin, latmax, tmin, tmax, N:int=512, speedonly:boo
     # Find the number of lateral positions contained within given range
     lat = np.array(lat).flatten()
     latmask = (lat >= latmin) & (lat <= latmax)
+    lat = lat[latmask]
     nlat = np.sum(latmask)
     if nlat == 0:
         raise ValueError(f"Latmask range of {latmin} to {latmax} does not contain any points")
-    latmin = np.min(lat[latmask])
-    latmax = np.max(lat[latmask])
-    lateval = np.linspace(latmin, latmax, nlat)
+    latmin = np.min(lat)
+    latmax = np.max(lat)
+    spctm = spctm[latmask,:]
 
-    f = RBS(lat, t, spctm)
+    t1 = np.tile(trange.reshape((-1,1)), (1, N))
+    t2 = np.tile(trange.reshape((1,-1)), (N, 1))
 
     sums = np.zeros((N,N))
+    for ilat in range(nlat):
+        tsel = (lat[ilat] - latmin)*(t2-t1)/(latmax-latmin) + t1
+        f = i1d(t, spctm[ilat,:], kind=interpkind, bounds_error=False, fill_value=0)
+        sums += f(tsel)
 
-    for it1 in range(N):
-        for it2 in range(it1+1, N):
-            teval = np.linspace(trange[it1], trange[it2], nlat)
-            sums[it1, it2] = np.sum(f(lateval, teval, grid=False))
-    
+    sums[t1 >= t2] = 0
     imax = np.where(sums == np.max(sums))
     if len(imax[0]) != 2:
         st1, st2 = imax
@@ -60,4 +61,3 @@ def swsradon(spctm, lat, t, latmin, latmax, tmin, tmax, N:int=512, speedonly:boo
         return c
     else:
         return c, sums, trange
-    
