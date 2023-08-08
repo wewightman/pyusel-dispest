@@ -54,9 +54,26 @@ def calc_kasai(I, Q, taxis: int = 2, fd = None, c: float = 1540.0, ksize: int = 
     _kshape[kaxis] = ksize
     _kernel = np.ones(_kshape)/ksize
     if ksize > 1:
+        # smooth displacement
         from scipy.signal import fftconvolve
-        _num = fftconvolve(_num, _kernel, mode='same', axes=kaxis)
-        _den = fftconvolve(_den, _kernel, mode='same', axes=kaxis)
+        _num = fftconvolve(_num, _kernel, mode='full', axes=kaxis)
+        _den = fftconvolve(_den, _kernel, mode='full', axes=kaxis)
+
+        # fix convolution based offset
+        _slices = []
+        for dim in I.shape:
+            _slices.append(slice(dim))
+        
+        # find starting and end points along kaxis
+        _kstart = int(ksize//2)
+        _kend = _kstart + I.shape[kaxis]
+        _slices[kaxis] = slice(_kstart, _kend)
+        _slices = tuple(_slices)
+
+        # truncate numerator and denomenator
+        _num = _num[_slices]
+        _den = _den[_slices]
+        
     
     # Convert scale phase if demodulation frequency is given
     disp = _scale * np.arctan2(_num, _den)
