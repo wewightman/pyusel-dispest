@@ -4,7 +4,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def calc_kasai(I, Q, taxis: int = 2, fd = None, c: float = 1540.0, ksize: int = 1, kaxis: int = 0, mode='cumsum'):
+def calc_kasai(I, Q, taxis: int = 2, fd = None, c: float = 1540.0, ksize: int = 1, kaxis: int = 0, progressive=True, mode='cumsum'):
     """Calculte small scale displacement via Kasai algorithm
 
     Parameters:
@@ -33,10 +33,21 @@ def calc_kasai(I, Q, taxis: int = 2, fd = None, c: float = 1540.0, ksize: int = 
 
     # Isolate t(0) to t(N-1)
     _t0_slicer = [slice(I.shape[ind]) for ind in range(len(I.shape))]
-    _t0_slicer[taxis] = slice(I.shape[taxis]-1)
+    if progressive:
+        logger.info('Using progressive reference')
+        _t0_slicer[taxis] = slice(I.shape[taxis]-1)
+        shape = [*(I.shape)]
+        shape[taxis] = I.shape[taxis]-1
+    else:
+        logger.info('Using fixed reference')
+        _t0_slicer[taxis] = slice(1)
+        shape = [*(I.shape)]
+        shape[taxis] = 1
     _t0_slicer = tuple(_t0_slicer)
     _i_0 = I[_t0_slicer]
     _q_0 = Q[_t0_slicer]
+
+    logger.debug("_i_0 shape" + str(_i_0.shape) + "I" + str(I.shape))
 
     # Isolate t(1) to t(N)
     _t1_slicer = [slice(I.shape[ind]) for ind in range(len(I.shape))]
@@ -54,6 +65,7 @@ def calc_kasai(I, Q, taxis: int = 2, fd = None, c: float = 1540.0, ksize: int = 
     _kshape[kaxis] = ksize
     _kernel = np.ones(_kshape)/ksize
     if ksize > 1:
+        logger.info("Smoothing numerator and denomenator")
         # smooth displacement
         from scipy.signal import fftconvolve
         _num = fftconvolve(_num, _kernel, mode='full', axes=kaxis)
@@ -78,7 +90,9 @@ def calc_kasai(I, Q, taxis: int = 2, fd = None, c: float = 1540.0, ksize: int = 
     # Convert scale phase if demodulation frequency is given
     disp = _scale * np.arctan2(_num, _den)
 
-    if mode == 'cumsum':
+    if progressive and (mode == 'cumsum'):
+        logger.info("Integrating progessive reference")
         disp = np.cumsum(disp, axis=taxis)
 
     return disp
+
