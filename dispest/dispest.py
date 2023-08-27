@@ -96,7 +96,7 @@ def calc_kasai(I, Q, taxis: int = 2, fd = None, c: float = 1540.0, ksize: int = 
 
     return disp
 
-def calc_disp_nxcor(RF, taxis: int = 2, fs = None, fd = None, c: float = 1540.0, kusf:int=4, ksize: int = 16, searchsize:int=32, stepsize=4, kssaxis: int = 0, progressive=True, mode='diff', kind=3):
+def calc_disp_nxcor(RF, taxis: int = 2, fs = None, c: float = 1540.0, kusf:int=4, ksize: int = 16, searchsize:int=32, stepsize=4, kssaxis: int = 0, progressive=True, mode='diff', kind=3):
     """Calculte small scale displacement via Kasai algorithm
 
     Parameters:
@@ -104,7 +104,6 @@ def calc_disp_nxcor(RF, taxis: int = 2, fs = None, fd = None, c: float = 1540.0,
     RF          : signal tensor, real only
     taxis       : axis of tensor over which to calculate phase shift (big-time)
     fs          : sampling frequency in Hz
-    fd          : demodulation frequency in Hz
     c           : speed of sound in m/s
     kusf:       : upsample factor along kaxis
     ksize       : size of the correlation kernel in samples, input frequency fs
@@ -119,16 +118,10 @@ def calc_disp_nxcor(RF, taxis: int = 2, fs = None, fd = None, c: float = 1540.0,
     ----
     disp: displacement information
     """
-
-    raise Exception("Method has not been implemented")
-
     # determine the output scale: samples, seconds, or um
     if (fs is None):
         logger.info("Scale is in input samples")
         _scale = 1/kusf
-    elif (fs is not None) and (fd is None):
-        logger.info("Scale is in time [us]")
-        _scale = 1E6/(kusf*fs)
     else:
         logger.info("Scale is in time [um]")
         _scale = 1E6*c/(2*kusf*fs)
@@ -152,64 +145,64 @@ def calc_disp_nxcor(RF, taxis: int = 2, fs = None, fd = None, c: float = 1540.0,
     if progressive:
         logger.info('Using progressive reference')
         _t0_slicer[taxis] = slice(RF.shape[taxis]-1)
+        Nt0 = RF.shape[taxis]-1
     else:
         logger.info('Using fixed reference')
         _t0_slicer[taxis] = slice(1)
+        Nt0 = 1
+    Nsamp = RF.shape[kssaxis]
     _t0_slicer = tuple(_t0_slicer)
     _rf_0 = RF[_t0_slicer]
+    _dims_orig = set(range(len(_rf_0.shape)))
+    _dims_trans = (*(_dims_orig-{taxis, kssaxis}), taxis, kssaxis)
+    _rf_0 = _rf_0.transpose(_dims_trans).flatten(order='c').reshape((-1, Nt0, Nsamp), order='c')
 
     # Isolate t(1) to t(N)
     _t1_slicer = [slice(dim) for dim in RF.shape]
     _t1_slicer[taxis] = slice(1, RF.shape[taxis])
+    Nt1 = RF.shape[taxis]-1
     _t1_slicer = tuple(_t1_slicer)
     _rf_1 = RF[_t1_slicer]
+    _rf_1 = _rf_1.transpose(_dims_trans).flatten(order='c').reshape((-1, Nt1, Nsamp), order='c')
 
-    # calculate the number of XCOR pixels to calculate in a given timeline
-    _nxcor = int(RF.shape[kssaxis]//stepsize)
+    # get reference and search kernels for each point
+    for iax in range(int(Nsamp/stepsize)):
+        imin = iax*stepsize - ksize//2
+        if imin < 0:
+            ioffmin = -imin
+            imin = 0
+        else: ioffmin = 0
 
-    if _nxcor < 1:
-        raise ValueError(f"length of kssaxis is too short -- cannot calculate displacement with step size of {stepsize//kusf}")
+        imax = iax*stepsize + ksize - ksize//2
+        if imax >= Nsamp:
+            ioffmax = ksize - imax + Nsamp
+            imax = Nsamp
+        else: ioffmax = ksize
 
-    # get the reference start and stop indices
-    _ref_start = stepsize*np.arange(_nxcor, dtype=int) - int(ksize//2)
-    _ref_start_offset = np.zeros(_ref_start.shape, dtype=int)
-    _ref_start_offset[_ref_start < 0] = -_ref_start[_ref_start < 0]
-    _ref_start[_ref_start < 0] = 0
-    _ref_stop = stepsize*np.arange(_nxcor, dtype=int) - int(ksize//2) + ksize
-    _ref_stop_offset = ksize*np.ones(_ref_stop.shape, dtype=int)
-    _ref_stop_offset[_ref_stop > RF.shape[kssaxis]] = ksize - (_search_stop[_search_stop  > RF.shape[kssaxis]] - RF.shape[kssaxis])
-    _ref_stop[_ref_stop > RF.shape[kssaxis]] = RF.shape[kssaxis]
+        islicer = (slice(None), slice(None), slice(imin, imax))
+        ioffslicer = (slice(None), slice(None), slice(ioffmin, ioffmax))
 
-    # get the search start and stop indices
-    _search_start = stepsize*np.arange(_nxcor, dtype=int) - int(searchsize//2)
-    _search_start_offset = np.zeros(_search_start.shape, dtype=int)
-    _search_start_offset[_search_start < 0] = -_ref_start[_search_start < 0]
-    _search_start[_search_start < 0] = 0
-    _search_stop = stepsize*np.arange(_nxcor, dtype=int) - int(searchsize//2) + searchsize
-    _search_stop_offset = searchsize*np.ones(_search_stop.shape, dtype=int)
-    _search_stop_offset[_search_stop > RF.shape[kssaxis]] = searchsize - (_search_stop[_search_stop  > RF.shape[kssaxis]] - RF.shape[kssaxis])
-    _search_stop[_search_stop > RF.shape[kssaxis]] = RF.shape[kssaxis]
+        refbuffer = np.zeros((_rf_0.shape[0], _rf_0.shape[1], ksize))
+        refbuffer[ioffslicer] = _rf_0[islicer]
 
-    # determine the shapes of the intermediate buffers - make kssaxis _nxcor long and tack on the buffer size
-    _refs_shape = _rf_0.shape
-    _refs_shape[kssaxis] = _nxcor
-    _refs_shape = (*_refs_shape, ksize)
+        imin = iax*stepsize - searchsize//2
+        if imin < 0:
+            ioffmin = -imin
+            imin = 0
+        else: ioffmin = 0
 
-    _searches_shape = _rf_1.shape
-    _searches_shape[kssaxis] = _nxcor
-    _searches_shape = (*_searches_shape, searchsize)
+        imax = iax*stepsize + searchsize - searchsize//2
+        if imax >= Nsamp:
+            ioffmax = searchsize - imax + Nsamp
+            imax = Nsamp
+        else: ioffmax = searchsize
 
-    # fill the intermediate buffers
-    _refs = np.zeros(_refs_shape)
-    _searches = np.zeros(_searches_shape)
+        islicer = (slice(None), slice(None), slice(imin, imax))
+        ioffslicer = (slice(None), slice(None), slice(ioffmin, ioffmax))
 
-    # build slicing objects
-    _refs_slices = [slice(dim) for dim in _refs.shape]
-    _searches_slices = [slice(dim) for dim in _searches.shape]
+        searchbuffer = np.zeros((_rf_1.shape[0], _rf_1.shape[1], searchsize))
+        searchbuffer[ioffslicer] = _rf_1[islicer]
 
-    for _ixc in range(_nxcor):
-        # set the last slicing object to match data selection
-        _refs_slices[kssaxis] = slice(_ref_start[_ixc], _ref_stop[_ixc])
-        _refs_slice = tuple(_refs_slices)
-
+        for ift in range(ksize+searchsize-1):
+            imin = 
 
