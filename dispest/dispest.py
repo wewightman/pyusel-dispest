@@ -95,9 +95,9 @@ def calc_kasai(I, Q, taxis: int = 2, fd = None, c: float = 1540.0, ksize: int = 
         disp = np.cumsum(disp, axis=taxis)
 
     return disp
-
+"""
 def calc_disp_nxcor(RF, taxis: int = 2, fs = None, c: float = 1540.0, kusf:int=4, ksize: int = 16, searchsize:int=32, stepsize=4, kssaxis: int = 0, progressive=True, mode='diff', kind=3):
-    """Calculte small scale displacement via Kasai algorithm
+    """"""Calculte small scale displacement via Kasai algorithm
 
     Parameters:
     ----
@@ -117,7 +117,7 @@ def calc_disp_nxcor(RF, taxis: int = 2, fs = None, c: float = 1540.0, kusf:int=4
     Returns:
     ----
     disp: displacement information
-    """
+    """"""
     # determine the output scale: samples, seconds, or um
     if (fs is None):
         logger.info("Scale is in input samples")
@@ -205,4 +205,4 @@ def calc_disp_nxcor(RF, taxis: int = 2, fs = None, c: float = 1540.0, kusf:int=4
 
         for ift in range(ksize+searchsize-1):
             imin = 
-
+"""
