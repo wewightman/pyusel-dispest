@@ -49,12 +49,8 @@ def swsradon(spctm, lat, t, latmin, latmax, tmin, tmax, N:int=512, speedonly:boo
         sums += f(tsel)
 
     sums[t1 >= t2] = 0
-    imax = np.where(sums == np.max(sums))
-    if len(imax[0]) != 2:
-        st1, st2 = imax
-    else:
-        st1, st2 = imax[0]
-
+    st1, st2 = np.where(sums == np.max(sums))
+    dt = np.mean(trange[st2]-trange[st1])
     c = float((latmax-latmin)/(trange[st2]-trange[st1]))
 
     if speedonly:
