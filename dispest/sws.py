@@ -51,7 +51,7 @@ def swsradon(spctm, lat, t, latmin, latmax, tmin, tmax, N:int=512, speedonly:boo
     sums[t1 >= t2] = 0
     st1, st2 = np.where(sums == np.max(sums))
     dt = np.mean(trange[st2]-trange[st1])
-    c = float((latmax-latmin)/(trange[st2]-trange[st1]))
+    c = float((latmax-latmin)/dt)
 
     if speedonly:
         return c
