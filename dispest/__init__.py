@@ -1,3 +1,4 @@
-import dispest.mod
-import dispest.sws
-from dispest.dispest import calc_kasai #, calc_disp_nxcor
+from dispest.radon import swsradon
+from dispest.kasai import calc_kasai
+from dispest.xcorr import calc_xcorr_pair
+from dispest.exceptions import DispEstException, XCorrException
