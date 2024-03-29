@@ -3,107 +3,105 @@ logger = __logging.getLogger(__name__)
 
 __XCORR_EPSILON__ = 1E-64
 
-def calc_xcorr_pair(ref, iir:int, search, iis:int, fs=None):
-    """Calculate the shift of a reference kernel in a larger signal""" 
-    from scipy.signal import correlate
-    from dispest.exceptions import XCorrException
+def get_xcorr_inds(Ns:int, lenref:int, refstep:int, searchpm:int, istart:int=0, istop:int|None=None):
+    """Generate indices used to select reference and search kernels from two signals
+    
+    # Parameters
+    `Ns`: number of samples in each signal
+    `lenref`: length of the reference kernel in samples
+    `refstep`: number of samples between the beginning of each reference kernel
+    `searchpm`: how many samples to search from the refernce kernel in either direction
+    `istart`: center point of the first reference kernel
+    `istop`: the center point of the last reference kernel to consider
+
+    # Returns
+    `selref`: indices of a 1D reference signal that correspond to all needed reference kernels
+    `selser`: indices of a 1D search signal that correspond to all needed search kernels
+    `outbnd`: boolean matrix indicating which indices in selser are not within the bounds of the search signal
+    `seliref`: shaped matrix used to slice the rows of the correlation matrix
+    """
+
     import numpy as np
 
-    if len(ref) > len(search): raise XCorrException("Reference kernel is larger than the search kernel")
-    
-    ## Actual nxcorr part - use of correlate assumes zero mean
-    # Calculate the cross correlation of the ref to signal
-    cross = correlate(search, ref, mode='valid')
-    # Calculate the autocorrelation for each signal 
-    selfa = np.sum(np.abs(ref)**2)
-    selfb = np.convolve(np.abs(search)**2, np.ones(len(ref)), mode='valid')
+    # make indices list that is the length of the kernel
+    kern = np.arange(lenref, dtype=int)
 
-    ## Guard against zero errors
-    # Raise an error if reference kernel is zeros
-    if (np.abs(selfa) <= __XCORR_EPSILON__): raise XCorrException("Reference kernel is all zeros")
-    
-    # Supress results if region of search is too zero-like
-    _selflow = np.abs(selfb) <= __XCORR_EPSILON__
-    cross[_selflow] = 0
-    selfb[_selflow] = 1
-    rho = cross/np.sqrt(selfa*selfb)
+    # make indices list that finds the first index of each reference kernel
+    istart = max(int(istart-lenref//2), 0)
+    if istop is not None: istop = min(Ns-lenref, istop)
+    else: istop = Ns-lenref
+    iref_start = np.arange(istart, istop, refstep, dtype=int)
 
-    # find the index of the peak in the correlation function
-    irho = np.argmax(np.abs(rho))
-    logger.info(f"Peak found at index {irho}")
+    # Calculate int midpoint of each reference kernel in indices
+    imid = iref_start + lenref/2
 
-    # ensure point is within search range - cant poly fit if at edge
-    if (irho == 0) and (irho == len(rho)-1):
-        raise XCorrException("Max was found at edge of correlation")
-    
-    # estimate time and value of peak with quadratic fit
-    fit = np.polyfit(np.arange(irho-1, irho+2), rho[(irho-1):(irho+2)], deg=2)
-    ipeak = -fit[1]/(2*fit[0])
-    rho_max = np.polyval(fit, ipeak)
+    # make indices list for how far to search from the reference kernel index
+    iserpm = np.arange(-searchpm, searchpm+1, dtype=int)
 
-    # convert to shifted index
-    di = iir - iis - ipeak
+    # broadcast ref_start and kern to get a N by 1 by k shaped list of indices
+    selref = iref_start[:,None, None] + kern[None,None,:]
 
-    # shift returned in units of indices
-    if fs is None:
-        logger.info("No sampling frequency given. Units are in indices")
-        return di, rho_max
-    
-    # shift returned in units of time
-    logger.info("Converting shift to time.")
-    return di/fs, rho_max
+    # broadcast ref_start, kern, and isearpm to get a N by 2*searchpm+1 by k shaped list of indices
+    selser = selref + iserpm[None,:,None]
 
-def calc_xcorr_pair_mu(ref, iir:int, search, iis:int, fs=None):
-    """Calcculate normalized cross correlation"""
-    from dispest.exceptions import XCorrException
+    # find and build a mask for all search kernel indices that are out of bound 
+    outbnd = (selser < 0) | (selser >= Ns)
+    selser[outbnd] = 0
+
+    # make a list to select the proper rows and three collumns from the N by 2*searchpm+1 correlation matrix
+    seliref = np.arange(selref.shape[0], dtype=int)[None,:] * np.ones((3,1), dtype=int)
+
+    return selref, selser, outbnd, seliref, imid
+
+def nxcorr_by_inds_mu(sigref, sigsearch, selref, selser, outbnd, seliref):
+    """Calculate the normalized cross correlation coefficients between two signals with the specified kernels"""
     import numpy as np
-    if (np.ndim(ref) != 1) or (np.ndim(search) != 1): raise XCorrException('Reference and search vectors must be 1D')
 
-    if len(ref) > len(search)+2: raise XCorrException("Reference kernel is larger than the search kernel")
+    # extract all kernels from reference and search
+    REF = sigref[selref]
+    SER = sigsearch[selser]
 
-    Nref = len(ref)
-    Ncomp = len(search) - Nref
+    # Mask out boundary conflicted values
+    SER[outbnd] = np.nan
 
-    # reslice the pair
-    it = np.arange(Nref, dtype=int).reshape(1,-1)
-    ilag = np.arange(Ncomp, dtype=int).reshape(-1,1)
-    indices = it + ilag
-    sersel = search[indices]
+    # calculate searchpm from selser
+    searchpm = int((SER.shape[1]-1)//2)
 
-    # format matrices
-    __mu = np.mean(sersel, axis=1).reshape(-1,1)
-    __search = sersel - __mu
-    __ref = ref.reshape(1,-1) - np.mean(ref)
+    # subtract the mean and get the power of the reference kernels
+    REF -= np.mean(REF, axis=2).reshape(REF.shape[0], REF.shape[1], 1)
+    REF_STD = np.std(REF, axis=2)
 
-    # calculate cross correlation terms
-    __cross = np.sum(__search * __ref, axis=1)
-    __selfr = np.sum(np.abs(__ref)**2, axis=1)
-    __selfs = np.sum(np.abs(__search)**2, axis=1)
+    # subtract the mean and get the power of the search kernels
+    SER -= np.mean(SER, axis=2).reshape(SER.shape[0], SER.shape[1], 1)
+    SER_STD = np.std(SER, axis=2)
 
-    __denom = np.sqrt(__selfr * __selfs)
+    # calculate the cross correlation between REF and SER
+    CROSS = np.mean(REF * SER, axis=2)
 
-    rho = __cross/__denom
-    
-    irho = np.argmax(np.abs(rho))
-    logger.info(f"Peak found at index {irho}")
+    # normalize to the combined signal power
+    RHOS = CROSS/(SER_STD*REF_STD)
 
-    # ensure point is within search range - cant poly fit if at edge
-    if (irho == 0) and (irho == len(rho)-1):
-        raise XCorrException("Max was found at edge of correlation")
-    
-    # estimate time and value of peak with quadratic fit
-    fit = np.polyfit(np.arange(irho-1, irho+2), rho[(irho-1):(irho+2)], deg=2)
-    ipeak = -fit[1]/(2*fit[0])
-    rho_max = np.polyval(fit, ipeak)
+    # get the peak correlation coefficients
+    imax = np.nanargmax(RHOS, axis=1)
+    invbnd = (imax < 1) | (imax >= 2*searchpm)
+    imax[invbnd] = searchpm
+    sellag = imax[None,:] + np.array([[-1, 0, 1]], dtype=int).T
+    peaks = RHOS[seliref, sellag]
 
-    # convert to shifted index
-    di = iir - iis - ipeak
+    # fit a quadratic to the peak correlation coefficient and its neighbors
+    a = (peaks[0] + peaks[2])/2 - peaks[1]
+    b = (peaks[2] - peaks[0])/2
+    c = peaks[1]
 
-    # shift returned in units of indices
-    if fs is None:
-        logger.info("No sampling frequency given. Units are in indices")
-        return di, rho_max
-    
-    # shift returned in units of time
-    logger.info("Converting shift to time.")
-    return di/fs, rho_max
+    # Estimate the shift in peak location predicted by the quadratic fit
+    dmax = -b/(2*a)
+
+    # mask out dmax values that correspond invalid imax values
+    dmax[invbnd] = np.nan
+
+    # find the correlation coefficient at the peak 'index'
+    rhomax = a*dmax*dmax + b*dmax + c
+
+    # Combine the predicted kernel index and predicted shift to get the true shift relative to the reference kernel
+    ishift = imax-searchpm+dmax
+    return ishift, rhomax
