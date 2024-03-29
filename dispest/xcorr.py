@@ -19,6 +19,7 @@ def get_xcorr_inds(Ns:int, lenref:int, refstep:int, searchpm:int, istart:int=0, 
     `selser`: indices of a 1D search signal that correspond to all needed search kernels
     `outbnd`: boolean matrix indicating which indices in selser are not within the bounds of the search signal
     `seliref`: shaped matrix used to slice the rows of the correlation matrix
+    `imid`: the indical midpoint of each reference kernel
     """
 
     import numpy as np
