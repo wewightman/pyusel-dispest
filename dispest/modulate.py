@@ -73,7 +73,7 @@ def remod_tensor(iq, fs_in:float, fs_out:float, ifmin:int, ifmax:int, taxis:int,
     # Returns:
     `sigout`: the returned signal
     """
-    from numpy import ceil, ndim
+    from numpy import ceil, ndim, real, zeros
     from numpy.fft import fft, ifft
 
     Ndim = int(ndim(iq))
@@ -84,13 +84,13 @@ def remod_tensor(iq, fs_in:float, fs_out:float, ifmin:int, ifmax:int, taxis:int,
     Nsamp = iq.shape[taxis]
 
     dfdn = fs_in/(Nsamp)
-    Nfreq = int(np.ceil(fs_out / dfdn))
+    Nfreq = int(ceil(fs_out / dfdn))
     fs_out = Nfreq * dfdn
 
     # calculate the shape of the signal tensor at the new sampling frequency
     sout = [*iq.shape]
     sout[taxis] = Nfreq
-    SIGOUT = np.zeros(sout, dtype=complex)
+    SIGOUT = zeros(sout, dtype=complex)
 
     # Paste the frequency content of the IQ signal into the upsampled array
     slices = [slice(None)] * Ndim
@@ -101,4 +101,4 @@ def remod_tensor(iq, fs_in:float, fs_out:float, ifmin:int, ifmax:int, taxis:int,
     sigout = (Nfreq/Nsamp) * ifft(SIGOUT, axis=taxis)
 
     if return_complex: return sigout, fs_out
-    return np.real(sigout), fs_out
+    return real(sigout), fs_out
