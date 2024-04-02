@@ -18,7 +18,7 @@ def demod_tensor(rf, fs:float, fmin:float, fmax:float, taxis:int, alpha:float=0.
     `fseff`: the new effective sampling frequency
     """
     from numpy import ceil, ndim
-    from numpy.fft import fft, ifft
+    from numpy.fft import fft, ifft, ifftshift
     from scipy.signal.windows import tukey
 
     Ndim = int(ndim(rf))
@@ -47,9 +47,11 @@ def demod_tensor(rf, fs:float, fmin:float, fmax:float, taxis:int, alpha:float=0.
     dsf = Nsamp / (ifmax-ifmin)
 
     # take fft of data tensor and select desired data
-    RF = fft(rf, axis=taxis)
-    RF = window * RF[*slices]
-    demod = 2 * ifft(RF, axis=taxis)
+    RF = fft(rf, axis=taxis)                    # transform signal to frequency domain
+    RF = window * RF[*slices]                   # truncate and window the frequency domain
+    IRF = ifftshift(RF)                         # shift frequency content to put original fc at 0
+    demod = ifft(IRF, axis=taxis)               # convert to spatial domain
+    demod = demod * 2 * (ifmax-ifmin) / Nsamp   # scale by downsample factor and by half fft
 
     # Calculate the new effective sampling frequency
     fseff = fs / dsf
@@ -74,7 +76,7 @@ def remod_tensor(iq, fs_in:float, fs_out:float, ifmin:int, ifmax:int, taxis:int,
     `sigout`: the returned signal
     """
     from numpy import ceil, ndim, real, zeros
-    from numpy.fft import fft, ifft
+    from numpy.fft import fft, fftshift, ifft
 
     Ndim = int(ndim(iq))
 
@@ -95,7 +97,8 @@ def remod_tensor(iq, fs_in:float, fs_out:float, ifmin:int, ifmax:int, taxis:int,
     # Paste the frequency content of the IQ signal into the upsampled array
     slices = [slice(None)] * Ndim
     slices[taxis] = slice(ifmin, ifmax)
-    SIGOUT[*slices] = fft(iq, axis=taxis)
+    IQ = fft(iq, axis=taxis)
+    SIGOUT[*slices] = fftshift(IQ) # put IQ f0 at SIGOUT fc
 
     # Calculate the time-space domain representation of the signal
     sigout = (Nfreq/Nsamp) * ifft(SIGOUT, axis=taxis)
