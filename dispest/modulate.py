@@ -49,7 +49,7 @@ def demod_tensor(rf, fs:float, fmin:float, fmax:float, taxis:int, alpha:float=0.
     # take fft of data tensor and select desired data
     RF = fft(rf, axis=taxis)                    # transform signal to frequency domain
     RF = window * RF[*slices]                   # truncate and window the frequency domain
-    IRF = ifftshift(RF)                         # shift frequency content to put original fc at 0
+    IRF = ifftshift(RF, axes=taxis)                         # shift frequency content to put original fc at 0
     demod = ifft(IRF, axis=taxis)               # convert to spatial domain
     demod = demod * 2 * (ifmax-ifmin) / Nsamp   # scale by downsample factor and by half fft
 
@@ -98,7 +98,7 @@ def remod_tensor(iq, fs_in:float, fs_out:float, ifmin:int, ifmax:int, taxis:int,
     slices = [slice(None)] * Ndim
     slices[taxis] = slice(ifmin, ifmax)
     IQ = fft(iq, axis=taxis)
-    SIGOUT[*slices] = fftshift(IQ) # put IQ f0 at SIGOUT fc
+    SIGOUT[*slices] = fftshift(IQ, axes=taxis) # put IQ f0 at SIGOUT fc
 
     # Calculate the time-space domain representation of the signal
     sigout = (Nfreq/Nsamp) * ifft(SIGOUT, axis=taxis)
