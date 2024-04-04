@@ -104,5 +104,5 @@ def nxcorr_by_inds_mu(sigref, sigsearch, selref, selser, outbnd, seliref):
     rhomax = a*dmax*dmax + b*dmax + c
 
     # Combine the predicted kernel index and predicted shift to get the true shift relative to the reference kernel
-    ishift = imax-searchpm+dmax
-    return ishift, rhomax
+    ilag = imax-searchpm
+    return ilag, dmax, rhomax
