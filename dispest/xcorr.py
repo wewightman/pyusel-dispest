@@ -54,7 +54,7 @@ def get_xcorr_inds(Ns:int, lenref:int, refstep:int, searchpm:int, istart:int=0, 
 
     return selref, selser, outbnd, seliref, imid
 
-def nxcorr_by_inds_mu(sigref, sigsearch, selref, selser, outbnd, seliref):
+def nxcorr_by_inds_mu(sigref, sigsearch, selref, selser, outbnd, seliref, get_power=False):
     """Calculate the normalized cross correlation coefficients between two signals with the specified kernels"""
     import numpy as np
 
@@ -105,4 +105,12 @@ def nxcorr_by_inds_mu(sigref, sigsearch, selref, selser, outbnd, seliref):
 
     # Combine the predicted kernel index and predicted shift to get the true shift relative to the reference kernel
     ilag = imax-searchpm
-    return ilag, dmax, rhomax
+
+    if not get_power: return ilag, dmax, rhomax
+    
+    # isolate signal strength at ilag
+    ref_pow = REF_STD.squeeze()
+    ser_pow = SER_STD[np.arange(SER.shape[0],dtype=int), imax].squeeze()
+
+    return ilag, dmax, rhomax, ref_pow, ser_pow
+
