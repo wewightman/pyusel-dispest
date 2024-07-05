@@ -113,4 +113,3 @@ def nxcorr_by_inds_mu(sigref, sigsearch, selref, selser, outbnd, seliref, get_po
     ser_pow = SER_STD[np.arange(SER.shape[0],dtype=int), imax].squeeze()
 
     return ilag, dmax, rhomax, ref_pow, ser_pow
-
