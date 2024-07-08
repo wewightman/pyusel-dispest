@@ -1,4 +1,4 @@
-CORRELATE_PAIRS_SRC = '''
+NXCORR_PAIRWISE_W_VAR_SRC = r'''
 extern "C"
 
 __constant__ struct __NXCORR_PARAMS__ {
@@ -39,14 +39,14 @@ __global__ void correlate(
 
     // calculate the bounds of the search kernel
     int dtsearch = threadIdx.x - nxcpar.Npm;
-    int tsmin = ipser + tkref + dtsearch;
+    int tsmin = ipser + t0kref + dtsearch;
     int tsmax = tsmin + nxcpar.Nt;
 
     // adjust kernel bounds to be within signal bounds
     if (trmin < ipref) {tsmin -= trmin + ipref; trmin = ipref;}
     if (tsmin < ipser) {trmin -= tsmin + ipser; tsmin = ipser;}
-    if (trmax > ipref + nxcpar.Ns) {tsmax -= trmax - ipref - nxcpar.Ns; trmax = ipref + nxpar.Ns;}
-    if (tsmax > ipser + nxcpar.Ns) {trmax -= tsmax - ipser - nxcpar.Ns; tsmax = ipser + nxpar.Ns;}
+    if (trmax > ipref + nxcpar.Ns) {tsmax -= trmax - ipref - nxcpar.Ns; trmax = ipref + nxcpar.Ns;}
+    if (tsmax > ipser + nxcpar.Ns) {trmax -= tsmax - ipser - nxcpar.Ns; tsmax = ipser + nxcpar.Ns;}
     int Nit = trmax - trmin;
 
     // calculate mean of each kernel
@@ -80,28 +80,3 @@ __global__ void correlate(
     rvar[ipref] = varr;
 }
 '''
-
-def __calc_gpu_params__(shape, taxis, lenref:int, refstep:int, searchpm:int, istart:int=0, istop:int|None=None):
-    """Generate indices used to select reference and search kernels from two signals
-    
-    # Parameters
-    `lenref`: length of the reference kernel in samples
-    `refstep`: number of samples between the beginning of each reference kernel
-    `searchpm`: how many samples to search from the refernce kernel in either direction
-    `istart`: center point of the first reference kernel
-    `istop`: the center point of the last reference kernel to consider
-
-    # Returns
-    `selref`: indices of a 1D reference signal that correspond to all needed reference kernels
-    `selser`: indices of a 1D search signal that correspond to all needed search kernels
-    `outbnd`: boolean matrix indicating which indices in selser are not within the bounds of the search signal
-    `seliref`: shaped matrix used to slice the rows of the correlation matrix
-    `imid`: the indical midpoint of each reference kernel
-    """
-
-    Ns = shape
-
-    istart = max(int(istart-lenref//2), 0)
-    if istop is not None: istop = min(Ns-lenref, istop)
-    else: istop = Ns-lenref
-    iref_start = np.arange(istart, istop, refstep, dtype=int)

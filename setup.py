@@ -8,7 +8,7 @@ setup(
     name="pyusel-dispest",
     description="Displacement estimators used in ultrasound elasticity",
     author="Wren Wightman",
-    packages=['dispest'],
+    packages=['dispest', 'dispest.nxcorr'],
     author_email="wew12@duke.edu",
     long_description=readme,
     version="0.0.1"

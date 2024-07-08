@@ -1,4 +1,5 @@
 import logging as __logging
+from typing import Literal
 logger = __logging.getLogger(__name__)
 
 __XCORR_EPSILON__ = 1E-64
@@ -113,3 +114,59 @@ def nxcorr_by_inds_mu(sigref, sigsearch, selref, selser, outbnd, seliref, get_po
     ser_pow = SER_STD[np.arange(SER.shape[0],dtype=int), imax].squeeze()
 
     return ilag, dmax, rhomax, ref_pow, ser_pow
+
+def __pairwise_nxcorr_gpu_driver(signals, pi, pj, 
+                                 lenref:int, refstep:int, searchpm:int, istart:int=0, istop:int|None=None, 
+                                 interpolation:Literal[None, 'quadratic']='quadratic', 
+                                 sumlags:bool=True, returnsigvar:bool=False):
+    """Calculate the normalized cross correlation between arbitrary pairs of signals described by pi and pj
+    
+    # Parameters:
+    `signals`: an (Np x Ns) matrix where Np is the number of signals and Ns is the number of samples
+    `pi`: the index of the reference signal in [0, Np)
+    `pj`: the index of the search signal in [0, Np)
+    `lenref`: length of the reference kernel in samples
+    `refstep`: number of samples between the beginning of each reference kernel
+    `searchpm`: how many samples to search from the refernce kernel in either direction
+    `istart`: the first index of the first kernel in the reference signal
+    `istop`: the first index of the last kernel in the reference signal
+    `interpolation`: the method used for sub-index lag estimation
+    `sumlags`: bool dictating if both the lag index and interpolated sub index shift are returned
+    `returnsigvar`: dictates if signal variance at peak lag is returned
+
+    # Returns:
+    `cc`: (Np x (istop-istart)//refstep) matrix of peak correlation coefficients
+    `lag` or `ilag`, `dlag`: either the summed or component indical and interpolated lags, depending on `sumlags`
+    `rvar`, `svar`: the variance of refernce and search kernels at the indical lag shown by ilag
+    `imids`: (istop-istart)//refstep length array of the average index of the refernce kernel
+    """
+
+    import cupy as cp
+
+    if istop is None: istop = signals.shape[1]-lenref
+
+    # load parameter struct with nxcorr details
+    parstruct = cp.dtype({
+        'names':['Ns','Np','Npp','Ncc','Npm','t0','dt','Nt'], 
+        'formats':[cp.int32]*8
+    })
+
+    params = cp.zeros(1, dtype=parstruct)
+    params['Np'] = signals.shape[0]
+    params['Ns'] = signals.shape[1]
+    params['Npp'] = len(pi)
+    params['Ncc'] = (istop-istop)//refstep
+    params['Npm'] = searchpm
+    params['t0'] = istart
+    params['Nt'] = lenref
+
+    signals = cp.array(signals)
+    pi = cp.array(pi)
+    pj = cp.array(pj)
+
+    if returnsigvar:
+        from dispest.nxcorr.__gpu_engines__ import NXCORR_PAIRWISE_W_VAR_SRC as code
+    else: raise NotImplementedError("No direction function yet")
+
+    CUDAENGINE = cp.RawModule(code=code)
+    CUDAENGINE.get_function("correlate")
