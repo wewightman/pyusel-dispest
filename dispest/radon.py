@@ -50,10 +50,34 @@ def swsradon(spctm, lat, t, latmin, latmax, tmin, tmax, N:int=512, speedonly:boo
 
     sums[t1 >= t2] = 0
     st1, st2 = np.where(sums == np.max(sums))
-    dt = np.mean(trange[st2]-trange[st1])
-    c = float((latmax-latmin)/dt)
+    st1 = st1[0]
+    st2 = st2[0]
+
+    validst1 = (st1 >= 1) | (st1 < N-1)
+    validst2 = (st2 >= 1) | (st2 < N-1)
+    if not (validst1 and validst2):
+        raise Exception(f"Both temporal coordinates must be between 1 and {N-1}, but found {st1} and {st2}")
+    
+    # estimate the sub-index peak
+    Ts = trange[1]-trange[0]
+    peakst1 = sums[(st1-1):(st1+2), st2]
+    dt1 = Ts * quadfitreg(peakst1)
+    peakst2 = sums[st1, (st2-1):(st2+2)]
+    dt2 = Ts * quadfitreg(peakst2)
+    
+    dt12 = np.mean(trange[st2] + dt2 - trange[st1] - dt1)
+    c = float((latmax-latmin)/dt12)
 
     if speedonly:
         return c
     else:
         return c, sums, trange
+
+def quadfitreg(peaks):
+    """Quadratic fit assuming reular sampling"""
+
+    a = (peaks[0] + peaks[2])/2 - peaks[1]
+    b = (peaks[2] - peaks[0])/2
+    c = peaks[1]
+
+    return -b/(2*a)
