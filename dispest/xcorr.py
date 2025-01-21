@@ -97,20 +97,27 @@ def nxcorr_by_inds_mu(sigref, sigsearch, selref, selser, outbnd, seliref, get_po
     # Estimate the shift in peak location predicted by the quadratic fit
     dmax = -b/(2*a)
 
-    # mask out dmax values that correspond invalid imax values
-    dmax[invbnd] = np.nan
-
     # find the correlation coefficient at the peak 'index'
     rhomax = a*dmax*dmax + b*dmax + c
 
     # Combine the predicted kernel index and predicted shift to get the true shift relative to the reference kernel
     ilag = imax-searchpm
 
+    # mask out-of-bounds estimates
+    dmax[invbnd] = 0
+    rhomax[invbnd] = 0
+    ilag[invbnd] = 0
+
     if not get_power: return ilag, dmax, rhomax
     
     # isolate signal strength at ilag
     ref_pow = REF_STD.squeeze()
     ser_pow = SER_STD[np.arange(SER.shape[0],dtype=int), imax].squeeze()
+
+    # mask out-of-bounds estiamtes
+    ser_pow[invbnd] = 0
+    ref_pow[invbnd] = 0
+
 
     return ilag, dmax, rhomax, ref_pow, ser_pow
 
