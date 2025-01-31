@@ -54,7 +54,7 @@ def get_xcorr_inds(Ns:int, lenref:int, refstep:int, searchpm:int, istart:int=0, 
 
     return selref, selser, outbnd, seliref, imid
 
-def nxcorr_by_inds_mu(sigref, sigsearch, selref, selser, outbnd, seliref, get_power=False):
+def nxcorr_by_inds_mu(sigref, sigsearch, selref, selser, outbnd, seliref, get_power=False, bias:float=0):
     """Calculate the normalized cross correlation coefficients between two signals with the specified kernels"""
     import numpy as np
 
@@ -80,7 +80,7 @@ def nxcorr_by_inds_mu(sigref, sigsearch, selref, selser, outbnd, seliref, get_po
     CROSS = np.mean(REF * SER, axis=2)
 
     # normalize to the combined signal power
-    RHOS = CROSS/(SER_STD*REF_STD)
+    RHOS = CROSS/(bias + SER_STD*REF_STD)
 
     # get the peak correlation coefficients
     imax = np.nanargmax(RHOS, axis=1)
