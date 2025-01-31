@@ -59,11 +59,15 @@ def swsradon(spctm, lat, t, latmin, latmax, tmin, tmax, N:int=512, speedonly:boo
         raise Exception(f"Both temporal coordinates must be between 1 and {N-1}, but found {st1} and {st2}")
     
     # estimate the sub-index peak
-    Ts = trange[1]-trange[0]
-    peakst1 = sums[(st1-1):(st1+2), st2]
-    dt1 = Ts * quadfitreg(peakst1)
-    peakst2 = sums[st1, (st2-1):(st2+2)]
-    dt2 = Ts * quadfitreg(peakst2)
+    try:
+        Ts = trange[1]-trange[0]
+        peakst1 = sums[(st1-1):(st1+2), st2]
+        dt1 = Ts * quadfitreg(peakst1)
+        peakst2 = sums[st1, (st2-1):(st2+2)]
+        dt2 = Ts * quadfitreg(peakst2)
+    except Exception as e:
+        dt1 = 0
+        dt2 = 0
     
     dt12 = np.mean(trange[st2] + dt2 - trange[st1] - dt1)
     c = float((latmax-latmin)/dt12)
