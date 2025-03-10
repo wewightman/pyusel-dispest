@@ -3,7 +3,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def calc_kasai(I, Q, taxis: int = 2, fd = None, c: float = 1540.0, ksize: int = 1, kaxis: int = 0, progressive=True, mode='cumsum'):
+def calc_kasai(I, Q, taxis: int = 2, fd = None, c: float = 1540.0, ksize: int = 1, kaxis: int = 0, progressive=True, mode='differential'):
     """Calculte small scale displacement via Kasai algorithm
 
     Parameters:
