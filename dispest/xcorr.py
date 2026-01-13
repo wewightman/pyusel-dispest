@@ -121,3 +121,96 @@ def nxcorr_by_inds_mu(sigref, sigsearch, selref, selser, outbnd, seliref, get_po
 
     return ilag, dmax, rhomax, ref_pow, ser_pow
 
+def nxcorr_gpu(
+        sigref, sigser, 
+        lenref:int, refstep:int, searchpm:int,
+        istart:int=0, istop:int|None=None,
+        get_power:bool=False, bias:float=0,
+        retasnp:bool=True, ntpb:int=256
+    ):
+    """Calculate the sliding window normalized cross correlation using GPU
+    
+    # Parameters
+    - `sigref,sigser`: the reference and search signals with length `Ns` last axis
+    - `lenref`: signal kernel length in samples
+    - `refstep`: steps between reference kernels in samples
+    - `searchpm`: the plus/minus search region in samples
+    - `istart`: the optional starting index of the first kernel. Default zero
+    - `istop`: the optional starting index of the last kernel, Default `Ns-lenref`
+    - `get_power`: whether to return the signal powers or not
+    - `bias`: the bias to use in the denominator of NXCC calculation to prevent divide by zero. Default zero
+    - `retasnp`: boolean indicatign whether to return as numpy array. Default True
+    - `ntpb`: number of threads per GPU block
+
+    # Returns
+    - `lag`: Lag estimate in units of samples
+    - `rho`: normalized correlation coefficient
+    - `imid`: the indical midpoint of each kernel
+    - `ref_std`: the standard deviation of the reference signal within the kernel
+    - `ser_std`: the standard deviation of the search signal within the lag-matched kernel
+    """
+
+    import os
+    import cupy as cp
+    import numpy as np
+
+    # check that inputs are valid
+    if (sigref.shape != sigser.shape): raise Exception("sigref and sigser must be the same shape")
+    
+
+    # calculate nvec and ns for potnetial upsampling nxc
+    Ns = np.int64(sigref.shape[-1])
+    Nvec = np.int64(np.prod(sigref.shape[:-1]))
+
+    # find the first index of each reference kernel
+    istart = max(int(istart-lenref//2), 0)
+    if istop is not None: istop = min(Ns-lenref, istop)
+    else: istop = Ns-lenref
+    iref_start = np.arange(istart, istop, refstep, dtype=int)
+
+    nref0 = np.int64(len(iref_start))
+
+    # Calculate midpoint of each reference kernel in indices
+    imid = iref_start + lenref/2
+
+    # load the cuda nxc module
+    __base_eng_path__ = os.path.join(os.path.dirname(__file__), "__xcorr__.cu")
+    with open(__base_eng_path__, mode='r') as fp: raw_module_str = fp.read()
+    __base_eng__ = cp.RawModule(code=raw_module_str)
+
+    calc_nxc_lagpairs    = __base_eng__.get_function("calc_nxc_lagpairs")
+
+    lag = cp.zeros((*sigref.shape[:-1], len(iref_start)), dtype=np.float32)
+    rho = cp.zeros(lag.shape, dtype=np.float32)
+    ref_std = cp.zeros(lag.shape, dtype=np.float32)
+    ser_std = cp.zeros(lag.shape, dtype=np.float32)
+
+    params = (
+        nref0,
+        cp.array(iref_start, dtype=np.int64),
+        np.int64(lenref),
+        np.int64(searchpm),
+        Ns,
+        Nvec,
+        cp.ascontiguousarray(cp.array(sigref), dtype=np.float32),
+        cp.ascontiguousarray(cp.array(sigser), dtype=np.float32),
+        rho,
+        lag,
+        ref_std,
+        ser_std,
+        np.float32(bias)
+    )
+
+    nblocks = int(np.ceil(Nvec*nref0/ntpb))
+
+    calc_nxc_lagpairs((nblocks,1,1), (ntpb,1,1), params)
+
+    if   get_power and retasnp:
+        return cp.asnumpy(lag), cp.asnumpy(rho), imid, cp.asnumpy(ref_std), cp.asnumpy(ser_std)
+    elif get_power:
+        return lag, rho, imid, ref_std, ser_std
+    elif retasnp:
+        return cp.asnumpy(lag), cp.asnumpy(rho), imid
+    else:
+        return lag, rho, imid
+
