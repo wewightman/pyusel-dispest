@@ -237,3 +237,111 @@ def nxcorr_gpu(
             return cp.asnumpy(lag), cp.asnumpy(rho), imid
         else:
             return lag, rho, imid
+        
+def nxcorr_cpu(
+        sigref, sigser, 
+        lenref:int, refstep:int, searchpm:int,
+        istart:int=0, istop:int|None=None,
+        get_power:bool=False, progress_bar=False, bias:float=0, ntpb:int=256
+    ):
+    """Calculate the sliding window normalized cross correlation using GPU
+    
+    # Parameters
+    - `sigref,sigser`: the reference and search signals with length `Ns` last axis
+    - `lenref`: signal kernel length in samples
+    - `refstep`: steps between reference kernels in samples
+    - `searchpm`: the plus/minus search region in samples
+    - `istart`: the optional starting index of the first kernel. Default zero
+    - `istop`: the optional starting index of the last kernel, Default `Ns-lenref`
+    - `get_power`: whether to return the signal powers or not
+    - `bias`: the bias to use in the denominator of NXCC calculation to prevent divide by zero. Default zero
+    - `retasnp`: boolean indicatign whether to return as numpy array. Default True
+    - `ntpb`: number of threads per batch (not used yet)
+
+    # Returns
+    - `lag`: Lag estimate in units of samples
+    - `rho`: normalized correlation coefficient
+    - `imid`: the indical midpoint of each kernel
+    - `ref_std`: the standard deviation of the reference signal within the kernel
+    - `ser_std`: the standard deviation of the search signal within the lag-matched kernel
+    """
+
+    from ctypes import c_float, c_longlong
+    import numpy as np
+    from tqdm import tqdm
+
+    # check that inputs are valid
+    if (sigref.shape != sigser.shape): raise Exception("sigref and sigser must be the same shape")
+    
+    from dispest.__cpu_engines__ import __cpu_dispest__, __offset_pnt__, __get_contig_pointer__, __get_pointer__
+
+    # get the dimensions for the data and convert to C pointers
+    Ns = sigref.shape[-1]
+    Nvec = int(np.prod(sigref.shape[:-1]))
+
+    sigref_pnt = __get_contig_pointer__(sigref, c_float)
+    sigser_pnt = __get_contig_pointer__(sigser, c_float)
+
+    # Make correlation kernel indices
+    istart = max(int(istart-lenref//2), 0)
+    if istop is not None: istop = min(Ns-lenref, istop)
+    else: istop = Ns-lenref
+    ref0s = np.arange(istart, istop, refstep, dtype=int)
+    nref0 = len(ref0s)
+
+    ref0s_pnt = __get_contig_pointer__(ref0s, c_longlong)
+
+    # make output buffers and generate corresponding pointer
+    lag = np.zeros((Nvec, nref0), dtype=c_float)
+    rho = np.zeros((Nvec, nref0), dtype=c_float)
+
+    lag_pnt = __get_pointer__(lag, ctype=c_float)
+    rho_pnt = __get_pointer__(rho, ctype=c_float)
+
+    if get_power:
+        refstd = np.zeros((Nvec, nref0), dtype=c_float)
+        serstd = np.zeros((Nvec, nref0), dtype=c_float)
+
+        refstd_pnt = __get_pointer__(refstd, ctype=c_float)
+        serstd_pnt = __get_pointer__(serstd, ctype=c_float)
+
+        if progress_bar: iterable = tqdm(range(Nvec))
+        else: iterable = range(Nvec)
+        for ipp in iterable:
+            params = (
+                c_longlong(Ns),
+                c_longlong(nref0),
+                ref0s_pnt,
+                c_longlong(lenref),
+                c_longlong(searchpm),
+                __offset_pnt__(sigref_pnt, ipp*Ns),
+                __offset_pnt__(sigser_pnt, ipp*Ns),
+                __offset_pnt__(lag_pnt, ipp*nref0),
+                __offset_pnt__(rho_pnt, ipp*nref0),
+                __offset_pnt__(refstd_pnt, ipp*nref0),
+                __offset_pnt__(serstd_pnt, ipp*nref0),
+                c_float(bias)
+            )
+
+            __cpu_dispest__.calc_nxc_and_std_lagpairs(*params)
+
+        return lag, rho, ref0s + lenref/2, refstd, serstd
+    else:
+        if progress_bar: iterable = tqdm(range(Nvec))
+        else: iterable = range(Nvec)
+        for ipp in iterable:
+            params = (
+                c_longlong(Ns),
+                c_longlong(nref0),
+                ref0s_pnt,
+                c_longlong(lenref),
+                c_longlong(searchpm),
+                __offset_pnt__(sigref_pnt, ipp*Ns),
+                __offset_pnt__(sigser_pnt, ipp*Ns),
+                __offset_pnt__(lag_pnt, ipp*nref0),
+                __offset_pnt__(rho_pnt, ipp*nref0),
+                c_float(bias)
+            )
+            __cpu_dispest__.calc_nxc_lagpairs(*params)
+
+        return lag, rho, ref0s + lenref/2
