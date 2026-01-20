@@ -41,7 +41,7 @@ def sim_trace(xs, amps, imp, tstart, tstop, fs, c:float=1540):
     return trace, t
 
 # define the scatterer field
-xmin = 0E-6
+xmin = 1E-6
 xmax = 10E-3
 Nx = int(1E4)
 
