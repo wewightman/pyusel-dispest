@@ -52,7 +52,7 @@ def sim_trace(xs, amps, imp, tstart, tstop, fs, c:float=1540, nbatch:int=512):
 # define the scatterer field
 xmin = (c/f)/2
 xmax = 10E-3 - (c/f)/2
-Nx = int(1E6)
+Nx = int(1E7)
 
 rng = np.random.default_rng(0)
 
