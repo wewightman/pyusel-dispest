@@ -28,7 +28,7 @@ extern void calc_nxc_and_std_lagpairs(
 /**
  * calc_nxc_and_std_lagpairs: calculate the sliding window normalized cross correlation
  */
-extern void calc_nxc_lagpairs(
+extern void calc_nxc_and_std_lagpairs(
     long long       nx,     // number of samples in the signal
     long long       nref0,  // number of starting indices to consider
     long long *     ref0s,  // start index for reference kernels
