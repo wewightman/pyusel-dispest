@@ -1,4 +1,12 @@
-from setuptools import setup
+from setuptools import Extension, setup
+
+# load the C extentsion library
+xcorr_cpu = Extension(
+    name="dispest._xcorr_cpu",
+    include_dirs=["dispest"],
+    depends=["dispest/__xcorr__.h"],
+    sources=["dispest/__xcorr__.c"]
+)
 
 with open("README.md", 'r') as f:
     readme = f.read()
@@ -21,4 +29,5 @@ setup(
     package_data={
         'dispest':["__xcorr__.cu"],
     },
+    ext_modules=[xcorr_cpu]
 )
