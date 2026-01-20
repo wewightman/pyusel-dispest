@@ -15,7 +15,8 @@ Ntc = np.ceil(tc*fs)
 timp = (np.arange(2*Ntc+1)-Ntc)/fs
 imp = sig.gausspulse(t=timp, bw=bw, tpr=-80, fc=f)
 
-def sim_trace(xs, amps, imp, tstart, tstop, fs, c:float=1540):
+def sim_trace(xs, amps, imp, tstart, tstop, fs, c:float=1540, nbatch:int=512):
+    import cupy as cp
     if (np.ndim(xs) != 1) or (np.ndim(amps) !=1) or (np.ndim(imp) !=1):
         raise ValueError("xs, amps, and imp must be 1D")
     if len(xs) != len(amps):
@@ -27,23 +28,31 @@ def sim_trace(xs, amps, imp, tstart, tstop, fs, c:float=1540):
     if len(imp) > nt:
         raise ValueError("Time trace mut be bigger than the impulse response")   
 
-    W = np.exp(-2j*np.pi*np.arange(nt)/nt)
+    W = cp.array(np.exp(-2j*np.pi*np.arange(nt)/nt))
 
-    indxs = (2*fs*xs/c)
-    amps = amps
+    indxs = cp.array(2*fs*xs/c)
+    amps = cp.array(amps)
+    nx = len(indxs)
 
     SCAT = 0
-    for amp, indx in tqdm(zip(amps, indxs), total=len(amps)):
-        SCAT += amp * W ** indx
-    IMP = np.fft.fft(imp, nt) * W **(-len(imp)/2)
+    tbar = tqdm(total=nx)
+    for idx0 in range(0, nx, nbatch):
+        idxn = np.min([nx, idx0+nbatch])
+        SCAT += cp.sum(amps[idx0:idxn,None] * W[None,:] ** indxs[idx0:idxn,None], axis=0)
+        tbar.update(idxn-idx0)
+    tbar.close()
+
+    SCAT = cp.asnumpy(SCAT)
+
+    IMP = np.fft.fft(imp, nt) * cp.asnumpy(W) **(-len(imp)/2)
     TRACE = SCAT * IMP
     trace = np.real(np.fft.ifft(TRACE))
     return trace, t
 
 # define the scatterer field
-xmin = 1E-6
-xmax = 10E-3
-Nx = int(1E4)
+xmin = (c/f)/2
+xmax = 10E-3 - (c/f)/2
+Nx = int(1E6)
 
 rng = np.random.default_rng(0)
 
