@@ -18,6 +18,8 @@ void calc_nxc_and_std_lagpairs(
     long long iref, ix0, i, isrc0min, isrc0max, irho2max, ilag;
     float rho2max, cross, vara, varb, mua, mub, flref;
 
+    flref = (float) lref;
+
     for (iref = 0; iref < nref0; ++iref)
     {
         isrc0min = (ref0s[iref]-nsrc      >= 0) ? -nsrc : -ref0s[iref];
@@ -134,6 +136,8 @@ void calc_nxc_lagpairs(
     long long iref, ix0, i, isrc0min, isrc0max, irho2max, ilag;
     float rho2max, cross, vara, varb, mua, mub, flref;
 
+    flref = (float) lref;
+
     for (iref = 0; iref < nref0; ++iref)
     {
         isrc0min = (ref0s[iref]-nsrc      >= 0) ? -nsrc : -ref0s[iref];
@@ -184,7 +188,6 @@ void calc_nxc_lagpairs(
             rho   [iref] = 0.0f;
             lag   [iref] = 0.0f;
         }
-
         // else intepolate the peak NCC, signal STDs, and lag
         else
         {
