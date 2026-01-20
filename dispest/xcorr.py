@@ -178,39 +178,62 @@ def nxcorr_gpu(
     with open(__base_eng_path__, mode='r') as fp: raw_module_str = fp.read()
     __base_eng__ = cp.RawModule(code=raw_module_str)
 
-    calc_nxc_lagpairs    = __base_eng__.get_function("calc_nxc_lagpairs")
-
     lag = cp.zeros((*sigref.shape[:-1], len(iref_start)), dtype=np.float32)
     rho = cp.zeros(lag.shape, dtype=np.float32)
-    ref_std = cp.zeros(lag.shape, dtype=np.float32)
-    ser_std = cp.zeros(lag.shape, dtype=np.float32)
 
-    params = (
-        nref0,
-        cp.array(iref_start, dtype=np.int64),
-        np.int64(lenref),
-        np.int64(searchpm),
-        Ns,
-        Nvec,
-        cp.ascontiguousarray(cp.array(sigref), dtype=np.float32),
-        cp.ascontiguousarray(cp.array(sigser), dtype=np.float32),
-        rho,
-        lag,
-        ref_std,
-        ser_std,
-        np.float32(bias)
-    )
+    if get_power:
+        calc_nxc_and_std_lagpairs    = __base_eng__.get_function("calc_nxc_and_std_lagpairs")
 
-    nblocks = int(np.ceil(Nvec*nref0/ntpb))
+        ref_std = cp.zeros(lag.shape, dtype=np.float32)
+        ser_std = cp.zeros(lag.shape, dtype=np.float32)
 
-    calc_nxc_lagpairs((nblocks,1,1), (ntpb,1,1), params)
+        params = (
+            nref0,
+            cp.array(iref_start, dtype=np.int64),
+            np.int64(lenref),
+            np.int64(searchpm),
+            Ns,
+            Nvec,
+            cp.ascontiguousarray(cp.array(sigref), dtype=np.float32),
+            cp.ascontiguousarray(cp.array(sigser), dtype=np.float32),
+            rho,
+            lag,
+            ref_std,
+            ser_std,
+            np.float32(bias)
+        )
 
-    if   get_power and retasnp:
-        return cp.asnumpy(lag), cp.asnumpy(rho), imid, cp.asnumpy(ref_std), cp.asnumpy(ser_std)
-    elif get_power:
-        return lag, rho, imid, ref_std, ser_std
-    elif retasnp:
-        return cp.asnumpy(lag), cp.asnumpy(rho), imid
+        nblocks = int(np.ceil(Nvec*nref0/ntpb))
+
+        calc_nxc_and_std_lagpairs((nblocks,1,1), (ntpb,1,1), params)
+
+        if retasnp:
+            return cp.asnumpy(lag), cp.asnumpy(rho), imid, cp.asnumpy(ref_std), cp.asnumpy(ser_std)
+        else:
+            return lag, rho, imid, ref_std, ser_std
+
     else:
-        return lag, rho, imid
+        calc_nxc_lagpairs    = __base_eng__.get_function("calc_nxc_lagpairs")
 
+        params = (
+            nref0,
+            cp.array(iref_start, dtype=np.int64),
+            np.int64(lenref),
+            np.int64(searchpm),
+            Ns,
+            Nvec,
+            cp.ascontiguousarray(cp.array(sigref), dtype=np.float32),
+            cp.ascontiguousarray(cp.array(sigser), dtype=np.float32),
+            rho,
+            lag,
+            np.float32(bias)
+        )
+
+        nblocks = int(np.ceil(Nvec*nref0/ntpb))
+
+        calc_nxc_lagpairs((nblocks,1,1), (ntpb,1,1), params)
+
+        if retasnp:
+            return cp.asnumpy(lag), cp.asnumpy(rho), imid
+        else:
+            return lag, rho, imid
