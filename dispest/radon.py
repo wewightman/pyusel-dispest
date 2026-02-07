@@ -1,7 +1,8 @@
 import logging as __logging
+from typing import Literal
 logger = __logging.getLogger(__name__)
 
-def swsradon(spctm, lat, t, latmin, latmax, tmin, tmax, N:int=512, speedonly:bool=True, interpkind='cubic'):
+def swsradon(spctm, lat, t, latmin, latmax, tmin, tmax, N:int=512, speedonly:bool=True, dirsel:Literal["pos","neg","all"]="pos", interpkind:Literal['cubic','linear','nearest']='cubic'):
     """Calculate the shear wave speed using radon sum algorithm
     
     Parameters:
@@ -15,6 +16,8 @@ def swsradon(spctm, lat, t, latmin, latmax, tmin, tmax, N:int=512, speedonly:boo
     `tmax`: maximum value of temporal extent to evaluate
     `N`: Number of time points to evaluate along lateral and temporal extents
     `speedonly`: determines whether to return just speed or (speed, t1_interp, t2_interp, radonsum, t)
+    `dirsel`: Only searches for peak in positive space time trajectories, negative space time trajectories, or all space tiem trajectories
+    `interpkind`: interpolation kind, either 'cubic', 'linear', or 'nearest'
 
     Returns:
     ----
@@ -47,7 +50,8 @@ def swsradon(spctm, lat, t, latmin, latmax, tmin, tmax, N:int=512, speedonly:boo
         f = i1d(t, spctm[ilat,:], kind=interpkind, bounds_error=False, fill_value=0)
         sums += f(tsel)
 
-    sums[t1 >= t2] = 0
+    if   dirsel == "pos": sums[t1 >= t2] = 0
+    elif dirsel == "neg": sums[t1 <= t2] = 0
     st1, st2 = np.where(sums == np.max(sums))
     st1 = st1[0]
     st2 = st2[0]
@@ -61,9 +65,11 @@ def swsradon(spctm, lat, t, latmin, latmax, tmin, tmax, N:int=512, speedonly:boo
     try:
         Ts = trange[1]-trange[0]
         peakst1 = sums[(st1-1):(st1+2), st2]
-        dt1 = Ts * quadfitreg(peakst1)
+        lag, _ = quadfitreg(peakst1)
+        dt1 = Ts * lag
         peakst2 = sums[st1, (st2-1):(st2+2)]
-        dt2 = Ts * quadfitreg(peakst2)
+        lag, _ = quadfitreg(peakst2)
+        dt2 = Ts * lag
     except Exception as e:
         dt1 = 0
         dt2 = 0
@@ -71,12 +77,10 @@ def swsradon(spctm, lat, t, latmin, latmax, tmin, tmax, N:int=512, speedonly:boo
     dt12 = np.mean(trange[st2] + dt2 - trange[st1] - dt1)
     c = float((latmax-latmin)/dt12)
 
-    print(st1, st2)
-
     if speedonly:
         return c
     else:
-        return c, t1+trange[st1], t2+trange[st2], sums, trange
+        return c, dt1+trange[st1], dt2+trange[st2], sums, trange
 
 def quadfitreg(peaks):
     """Quadratic fit assuming reular sampling"""
@@ -85,4 +89,8 @@ def quadfitreg(peaks):
     b = (peaks[2] - peaks[0])/2
     c = peaks[1]
 
-    return -b/(2*a)
+    # calculate lag and value at the lag
+    lag = -b/(2*a)
+    val = a * lag**2 + b * lag + c
+
+    return lag, val
