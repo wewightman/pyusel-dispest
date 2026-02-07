@@ -14,7 +14,7 @@ def swsradon(spctm, lat, t, latmin, latmax, tmin, tmax, N:int=512, speedonly:boo
     `tmin`: minimum value of temporal extent to evaluate
     `tmax`: maximum value of temporal extent to evaluate
     `N`: Number of time points to evaluate along lateral and temporal extents
-    `speedonly`: determines whether to return just speed or (speed, radonsum, t)
+    `speedonly`: determines whether to return just speed or (speed, t1_interp, t2_interp, radonsum, t)
 
     Returns:
     ----
@@ -39,8 +39,7 @@ def swsradon(spctm, lat, t, latmin, latmax, tmin, tmax, N:int=512, speedonly:boo
     latmax = np.max(lat)
     spctm = spctm[latmask,:]
 
-    t1 = np.tile(trange.reshape((-1,1)), (1, N))
-    t2 = np.tile(trange.reshape((1,-1)), (N, 1))
+    t1, t2 = np.meshgrid(trange,trange, indexing='ij')
 
     sums = np.zeros((N,N))
     for ilat in range(nlat):
@@ -72,10 +71,12 @@ def swsradon(spctm, lat, t, latmin, latmax, tmin, tmax, N:int=512, speedonly:boo
     dt12 = np.mean(trange[st2] + dt2 - trange[st1] - dt1)
     c = float((latmax-latmin)/dt12)
 
+    print(st1, st2)
+
     if speedonly:
         return c
     else:
-        return c, sums, trange
+        return c, t1+trange[st1], t2+trange[st2], sums, trange
 
 def quadfitreg(peaks):
     """Quadratic fit assuming reular sampling"""
